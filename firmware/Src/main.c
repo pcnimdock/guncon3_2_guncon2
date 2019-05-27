@@ -102,10 +102,12 @@ uint8_t cad_init[]="Iniciado... \r\n";
  */
 
 uint32_t ticks_ms;
+uint8_t out_screen[8]={0xFF,0xDF,0,0,0,0,0,0};
 int main(void) {
 	/* USER CODE BEGIN 1 */
 	uint16_t data_to_send;
 	uint8_t send_cad[255];
+	static uint8_t calibration_count=0;
 	/* USER CODE END 1 */
 
 	/* MCU Configuration--------------------------------------------------------*/
@@ -133,6 +135,7 @@ int main(void) {
 	HAL_UART_Transmit_DMA(&huart3, cad_init, 14);
 	HAL_UART_Receive_DMA(&huart3, (uint8_t *) RX_BUFF, 7);
 	ticks_ms = HAL_GetTick();
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, RESET);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -157,36 +160,38 @@ int main(void) {
 					gcon.x, gcon.y, gcon.btn);
 			HAL_UART_Transmit_DMA(&huart3, send_cad, data_to_send);
 		}
-		else
-		{
+
 			//send every 8 ms
 			if ((HAL_GetTick() - ticks_ms) > 8)
 			{
-				if(gcon.calibration==0)
-				{
 				ticks_ms = HAL_GetTick();
+				if((gcon.calibration==0)&&(calibration_count==0))
+				{
+					calibration_count=0;
 				USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
 						JOYSTICK_REPORT_SIZE);
+
 				}
 				else
 				{
-					if(gcon.calibration<9)
+
+					if(calibration_count++<8)
 					{
-						gcon.calibration++;
+
 						USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
 												JOYSTICK_REPORT_SIZE);
 
 					}
 					else
 					{
-						gcon.buffer[2]=gcon.buffer[3]=gcon.buffer[4]=gcon.buffer[5]=0;
-						USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
-																		JOYSTICK_REPORT_SIZE);
+						HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
+						USBD_HID_SendReport(&hUsbDeviceFS, out_screen,JOYSTICK_REPORT_SIZE);
+						if(calibration_count>20){calibration_count=0;}
 					}
 				}
 			}
-		}
+
 		//---------------------
 	}
 	/* USER CODE END 3 */
