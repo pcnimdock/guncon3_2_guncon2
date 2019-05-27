@@ -21,6 +21,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "guncon2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -65,23 +66,20 @@ static void MX_USART3_UART_Init(void);
 #define JOYSTICK_REPORT_SIZE 8
 uint8_t joystick[JOYSTICK_REPORT_SIZE]={0xFF,0xFE,0,0,0,0,0,0};
 uint8_t ms;
-uint8_t sending=0;cmd_encola=0;
+
 extern USBD_HandleTypeDef hUsbDeviceFS;
-uint16_t offsets_mode[3]={0};
-uint8_t next_point=0;
+extern struct GUNCON2 gcon;
+
+
+
+
+
+
+
 
 uint8_t data_recived=0;
 
-#define BUTTON_TRIGGER			0x2000
-#define BUTTON_A						0x0008
-#define BUTTON_B						0x0004
-#define BUTTON_C						0x0002
-#define BUTTON_SELECT				0x4000
-#define BUTTON_START				0x8000
-#define DPAD_UP      				0x0010
-#define DPAD_DOWN						0x0040
-#define DPAD_LEFT 					0x0080
-#define DPAD_RIGHT 0x0020
+
 
 #define RX_BUFF_SIZE 10
 
@@ -101,120 +99,97 @@ uint8_t cad_init[]="Iniciado... \r\n";
 /**
   * @brief  The application entry point.
   * @retval int
-  */
-static uint8_t cad_recv[]="recibido\n";
-int main(void)
-{
-  /* USER CODE BEGIN 1 */
-uint16_t data_to_send;
-uint8_t send_cad[255];
-  /* USER CODE END 1 */
-  
+ */
 
-  /* MCU Configuration--------------------------------------------------------*/
+uint32_t ticks_ms;
+int main(void) {
+	/* USER CODE BEGIN 1 */
+	uint16_t data_to_send;
+	uint8_t send_cad[255];
+	/* USER CODE END 1 */
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* MCU Configuration--------------------------------------------------------*/
 
-  /* USER CODE BEGIN Init */
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* USER CODE END Init */
+	/* USER CODE BEGIN Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	/* USER CODE END Init */
 
-  /* USER CODE BEGIN SysInit */
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* USER CODE END SysInit */
+	/* USER CODE BEGIN SysInit */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_USART3_UART_Init();
-  MX_USB_DEVICE_Init();
-  /* USER CODE BEGIN 2 */
-  HAL_UART_Transmit_DMA(&huart3, cad_init, 14);
-  HAL_UART_Receive_DMA(&huart3, (uint8_t *)RX_BUFF, 7);
+	/* USER CODE END SysInit */
 
-  /* USER CODE END 2 */
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	MX_USART3_UART_Init();
+	MX_USB_DEVICE_Init();
+	/* USER CODE BEGIN 2 */
+	HAL_UART_Transmit_DMA(&huart3, cad_init, 14);
+	HAL_UART_Receive_DMA(&huart3, (uint8_t *) RX_BUFF, 7);
+	ticks_ms = HAL_GetTick();
+	/* USER CODE END 2 */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
 	while (1) {
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
 
-		if (uart3_timeout_error) {
+		if (uart3_timeout_error)
+		{
 			//reiniciar recepción DMA
 
-		//	HAL_UART_Receive_DMA(&huart3, (uint8_t *) RX_BUFF, 8);
+			//	HAL_UART_Receive_DMA(&huart3, (uint8_t *) RX_BUFF, 8);
 			uart3_timeout_error = 0;
 		}
-
-		if(data_recived)
+		if (data_recived)
 		{
-			joystick[0]=RX_BUFF[0];
-			joystick[1]=RX_BUFF[1];
-			joystick[2]=RX_BUFF[2];
-			joystick[3]=RX_BUFF[3];
-			joystick[4]=RX_BUFF[4];
-			joystick[5]=RX_BUFF[5];
-			ms = RX_BUFF[6];
-			btn=((uint16_t)(RX_BUFF[0]))*256;
-			btn|=RX_BUFF[1];
 			data_recived=0;
-			if(next_point>0)
-			{next_point=0;
-			data_to_send=sprintf(send_cad,"conf: %x %x %x\r\n",offsets_mode[0],offsets_mode[1],offsets_mode[2]);
-			if(offsets_mode[2]!=0)
-			{progressive=1;}
-			}
-			else
-			{
-				if(progressive)
-							{
-								joystick[0]|=0x01;
-							}
-				data_to_send=sprintf(send_cad,"echo: %x %x %x %x %x %x\r\n",joystick[0],joystick[1],joystick[2],joystick[3],joystick[4],joystick[5]);
-			}
-			uint8_t temp_pin;
-						temp_pin=HAL_GPIO_ReadPin(BTN_WK_GPIO_Port, BTN_WK_Pin);
+			gcon_save_data(RX_BUFF);
+			data_to_send = sprintf(send_cad, "echo: %04d %04d %04x \r\n",
+					gcon.x, gcon.y, gcon.btn);
 			HAL_UART_Transmit_DMA(&huart3, send_cad, data_to_send);
-			USBD_HID_SendReport(&hUsbDeviceFS, joystick, JOYSTICK_REPORT_SIZE);
-
-			if((temp_pin==1)&&((btn&BUTTON_TRIGGER)==0))
+		}
+		else
+		{
+			//send every 8 ms
+			if ((HAL_GetTick() - ticks_ms) > 8)
 			{
-				//esto es modo calibración
-				//se debe mandar después de 8-9ms una cadena de reinicio
-				uint8_t temp;
-				temp=joystick[1];
-				joystick[2]=joystick[3]=joystick[4]=joystick[5]=0;
-				joystick[0]=0xFE;//joystick[1]=0xFF;
-				if(progressive){joystick[0]=0xFF;}
-				HAL_Delay(9);
-				USBD_HID_SendReport(&hUsbDeviceFS, joystick, JOYSTICK_REPORT_SIZE);
-//				joystick[2]=joystick[3]=joystick[4]=joystick[5]=0;
-//								joystick[0]=0xFE;joystick[1]=0xFF;
-//								if(progressive){joystick[0]=0xFF;}
-//								HAL_Delay(9);
-//								USBD_HID_SendReport(&hUsbDeviceFS, joystick, JOYSTICK_REPORT_SIZE);
+				if(gcon.calibration==0)
+				{
+				ticks_ms = HAL_GetTick();
+				USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
+						JOYSTICK_REPORT_SIZE);
+				}
+				else
+				{
+					if(gcon.calibration<9)
+					{
+						gcon.calibration++;
+						USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
+												JOYSTICK_REPORT_SIZE);
+
+					}
+					else
+					{
+						gcon.buffer[2]=gcon.buffer[3]=gcon.buffer[4]=gcon.buffer[5]=0;
+						USBD_HID_SendReport(&hUsbDeviceFS, gcon.buffer,
+																		JOYSTICK_REPORT_SIZE);
+
+					}
+				}
 			}
 		}
-	/*	joystick[2] = x & 0xFF;
-		joystick[3] = x / 256;
-		joystick[4] = y & 0xFF;
-		joystick[5] = y / 256;
-		joystick[6] = 0;
-		joystick[7] = 0;*/
-//		if (x > 700) {
-//			x = 120;
-//		}
-//		if (y > 32767 + 120) {
-//			y = 32767 - 120;
-//		}
+		//---------------------
 	}
-  /* USER CODE END 3 */
+	/* USER CODE END 3 */
 }
 
 /**
@@ -402,6 +377,23 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
+}
+
+/**
+ *
+*
+*	Almacenar valores de los botones y el valor de x mandado
+*/
+
+void save_data_recived()
+{
+			joystick[0]=RX_BUFF[0];
+			joystick[1]=RX_BUFF[1];
+			joystick[2]=RX_BUFF[2];
+			joystick[3]=RX_BUFF[3];
+			joystick[4]=RX_BUFF[4];
+			joystick[5]=RX_BUFF[5];
+			ms = RX_BUFF[6];	
 }
 #endif /* USE_FULL_ASSERT */
 

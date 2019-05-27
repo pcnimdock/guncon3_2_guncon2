@@ -46,6 +46,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_hid.h"
 #include "usbd_ctlreq.h"
+#include "guncon2.h"
 
 
 /** @addtogroup STM32_USB_DEVICE_LIBRARY
@@ -119,10 +120,10 @@ static uint8_t  USBD_HID_DataIn (USBD_HandleTypeDef *pdev, uint8_t epnum);
   */
 uint8_t hid_flag=0;
 uint8_t hid_set_report_size=0;
-uint8_t data_report[10];
+uint8_t data_report[10]; // XL XH YL YH mode
 uint8_t data_copy[10];
-extern uint8_t next_point;
-extern uint16_t offsets_mode[3];  //x y mode
+
+extern uint16_t offsets_mode[3];
 
 #define PROGRESSIVE_SCAN 0x0100;
 
@@ -131,6 +132,7 @@ extern uint16_t y;
 static uint8_t USBD_CUSTOM_HID_EP0_RxReady(USBD_HandleTypeDef *pdev)
 {
 int i;
+int16_t off_temp;
 if (hid_flag == 1U)
   {
 
@@ -140,15 +142,20 @@ if (hid_flag == 1U)
     	data_copy[i]= data_report[i];
 
     }
-    offsets_mode[0]=data_report[0];
-    offsets_mode[0]|=((uint16_t)data_report[1])<<8;
-    offsets_mode[1]=data_report[2];
-    offsets_mode[1]|=((uint16_t)data_report[3])<<8;
-    offsets_mode[2]=data_report[4];
-    offsets_mode[2]|=((uint16_t)data_report[5])<<8;
+    off_temp=0;
+    off_temp|=(((uint16_t)data_report[1])<<8|(data_report[0]));
+    set_offset_x(off_temp);
+    off_temp=0;
+    off_temp|=(((uint16_t)data_report[3])<<8|(data_report[2]));
+    set_offset_y(off_temp);
+
+    if(data_report[5])
+    {
+    	set_progressive();
+    }
     //y=data_report[6]*256+data_report[7];
     hid_flag = 0U;
-  next_point++;
+
   }
 
   return USBD_OK;
